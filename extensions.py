@@ -1,45 +1,35 @@
-import telebot
-from config import TOKEN, values, main_menu, help
-from extensions import APIException, CryptoConverter
+import requests
+import json
+from config import values
 
-bot = telebot.TeleBot(TOKEN)
 
-@bot.message_handler(commands=['menu', ])
-def main_menuu(message):
-    bot.send_message(message.chat.id, main_menu)
+class APIException(Exception):
+    pass
 
-@bot.message_handler(commands=['start', ])
-def startt(message):
-    bot.send_message(message.chat.id, help + '\n /menu')
+class CryptoConverter:
+    @staticmethod
+    def convert(base: str, quote: str, amount: str):
 
-@bot.message_handler(commands=['help', ])
-def helpp(message):
-    bot.send_message(message.chat.id, help + '\n /menu')
+        if base == quote:
+            raise APIException(f'Не удалось перевести одинаковые валюты: {base}-{quote}')
 
-@bot.message_handler(commands=['values', ])
-def valuess(message):
-    bot.send_message(message.chat.id, 'ДОСТУПНЫ СЛЕДУЮЩИЕ ВАЛЮТЫ:')
-    for i in values:
-        bot.send_message(message.chat.id, i + ' ' + values[i] )
-    bot.send_message(message.chat.id, '/menu')
+        try:
+            base_ticker = values[base]
+        except KeyError:
+            raise APIException(f'Не удалось обработать валюту {base}')
 
-@bot.message_handler(content_types=['text', ])
-def convert_result(message: telebot.types.Message):
-    try:
-        val = message.text.split(' ')
+        try:
+            quote_ticker = values[quote]
+        except KeyError:
+            raise APIException(f'Не удалось обработать валюту {quote}')
 
-        if len(val) != 3:
-            raise APIException('Проверьте параметры')
+        try:
+            amount = float(amount)
+        except ValueError:
+            raise APIException(f'Не удалось обработать количество {amount}')
 
-        base, quote, amount = val
-        result = CryptoConverter.convert(base, quote, amount)
-    except APIException as e:
-        bot.reply_to(message, f'Ошибка пользователя.\n {e}')
-    except Exception as e:
-        bot.reply_to(message, f'Не удалось обработать команду.\n {e}')
-    else:
-        text = f'{amount} {values[base]}({base}) в {values[quote]}({quote}) равно: {result}'
-        bot.send_message(message.chat.id, text)
-        bot.send_message(message.chat.id, "/menu")
+        r = requests.get(f'https://min-api.cryptocompare.com/data/price?fsym={base_ticker}&tsyms={quote_ticker}')
+        result = json.loads(r.content)[values[quote]]
+        result *= amount
 
-bot.polling()
+        return result
